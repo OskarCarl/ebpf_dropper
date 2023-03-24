@@ -189,9 +189,14 @@ typedef enum state {
 #define GEMODEL_R_PERCENTS_TIMES_100 ((uint32_t) (GEMODEL_R_PERCENTS*100))
 #define GEMODEL_K_PERCENTS_TIMES_100 ((uint32_t) (GEMODEL_K_PERCENTS*100))
 #define GEMODEL_H_PERCENTS_TIMES_100 ((uint32_t) (GEMODEL_H_PERCENTS*100))
+
+#ifndef IP1_TO_DROP
+#define ALL_IPS_DROP 1
+#define IP1_TO_DROP 0
+#define IP2_TO_DROP 0
+#endif
+
 //#define SEED 42
-//#define IP1_TO_DROP 0
-//#define IP2_TO_DROP 0
 //#define PORT_TO_WATCH 6121
 
 static int pow10[8] = {
@@ -501,7 +506,11 @@ __attribute__((always_inline)) int decision_function(struct __sk_buff *skb, __u1
 // this functions drops the packets 0, 3, 4, 8 and 10 from the TCP flow between IP1_TO_DROP and IP2_TO_DROP, on port PORT_TO_WATCH
 __attribute__((always_inline)) int decision_function_drop_sequence(struct __sk_buff *skb, __u16 protocol) {
     // to be completed by the user
+#ifndef ALL_IPS_DROP
     if (ALL_DROP(drop_if_protocol(skb, protocol), drop_if_port(skb, PORT_TO_WATCH, protocol), drop_if_addrs(skb, IP1_TO_DROP, IP2_TO_DROP))){
+#else
+    if (ALL_DROP(drop_if_protocol(skb, protocol), drop_if_port(skb, PORT_TO_WATCH, protocol))){
+#endif
         __u32 sequence[] = SEQUENCE;
         return drop_packet_sequence(sequence, sizeof(sequence)/sizeof(__u32));
     }

@@ -1,4 +1,5 @@
 import argparse
+import os
 
 TCP = 0x06
 UDP = 0x11
@@ -28,7 +29,7 @@ parser.add_argument("--port", help="port (tcp or udp), a packet must have this v
 parser.add_argument("--udp", help="if set, monitor UDP packets instead of TCP", action="store_true")
 parser.add_argument("--seed", help="prng seed (int)", type=int, default=42)
 parser.add_argument("--headers", help="directory containing the uapi linux headers needed to compile the dropper",
-                    default="./headers")
+                    default="/usr/lib/modules/{}/build/include/".format(os.uname().release))
 parser.add_argument("--attach", help="specifies the interface on which to attach the generated file",
                     default=None)
 parser.add_argument("--attach-ingress", help="if set and the --attach option is used, the dropper will be attached in"
@@ -44,8 +45,6 @@ gemodel = args.gemodel
 if sequence and gemodel:
     raise Exception("Either gemodel or sequence but not both")
 
-import os
-
 if args.clean:
     if os.path.exists(args.f):
         os.remove(args.f)
@@ -57,21 +56,24 @@ if args.clean:
 
 clang_args = ""
 
-ips = args.ips.split(",")
+IPS=""
+if args.ips:
+    ips = args.ips.split(",")
+    IPS="-DIP1_TO_DROP={} -DIP2_TO_DROP={} ".format(ip_to_int(ips[0]), ip_to_int(ips[1]))
 
 drop_sequence = 1 if sequence else 0
 use_gemodel = 1 if gemodel else 0
 protocol = UDP if args.udp else TCP
 
 clang_args = "-DGEMODEL={} -DGEMODEL_P_PERCENTS={} -DGEMODEL_R_PERCENTS={} -DGEMODEL_K_PERCENTS={} " \
-             "-DGEMODEL_H_PERCENTS={} -DPROBA_percents={} -DDROP_SEQUENCE={} -DSEQUENCE=\\{{{}\\}} -DSEED={} -DIP1_TO_DROP={} "\
-             "-DIP2_TO_DROP={} -DPORT_TO_WATCH={} -DPROTOCOL_TO_WATCH={} -I{}"\
-    .format(use_gemodel, args.P, args.R, args.K, args.H, args.P, drop_sequence, sequence, args.seed, ip_to_int(ips[0]), ip_to_int(ips[1]),
+             "-DGEMODEL_H_PERCENTS={} -DPROBA_percents={} -DDROP_SEQUENCE={} -DSEQUENCE=\\{{{}\\}} -DSEED={} " \
+             "{}-DPORT_TO_WATCH={} -DPROTOCOL_TO_WATCH={} -I{}" \
+    .format(use_gemodel, args.P, args.R, args.K, args.H, args.P, drop_sequence, sequence, args.seed, IPS,
             args.port, protocol, args.headers)
 
 
-compile_cmd = "clang -O2 {} -D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign -fno-stack-protector" \
-                  "-Wno-compare-distinct-pointer-types -I./headers -emit-llvm -c ebpf_dropper.c -o - | llc -march=bpf " \
+compile_cmd = "clang -O2 {} -D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign -fno-stack-protector " \
+                  "-Wno-compare-distinct-pointer-types -emit-llvm -c ebpf_dropper.c -o - | llc -march=bpf " \
                   "-filetype=obj -o {}".format(clang_args, args.f)
 if args.v:
     print(compile_cmd)
