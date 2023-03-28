@@ -7,7 +7,9 @@
 #define KBUILD_MODNAME "EBPF Dropper"
 #include <asm/byteorder.h>
 #include <uapi/linux/bpf.h>
-#include "bpf_helpers.h"
+#include <bpf/bpf_helpers.h>
+
+#include "net.h"
 
 #define IP_TCP 	6
 #define ETH_HLEN 14
@@ -19,82 +21,10 @@
 #define SEQUENCE {0, 3, 8, 10, 4}
 #endif
 
+unsigned long long load_byte(void *skb, unsigned long long off) asm("llvm.bpf.load.byte");
+unsigned long long load_half(void *skb, unsigned long long off) asm("llvm.bpf.load.half");
+unsigned long long load_word(void *skb, unsigned long long off) asm("llvm.bpf.load.word");
 
-
-// from uapi/linux/ip.h
-struct iphdr {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8	ihl:4,
-		version:4;
-#elif defined (__BIG_ENDIAN_BITFIELD)
-	__u8	version:4,
-  		ihl:4;
-#else
-#error	"Please fix <asm/byteorder.h>"
-#endif
-	__u8	tos;
-	__be16	tot_len;
-	__be16	id;
-	__be16	frag_off;
-	__u8	ttl;
-	__u8	protocol;
-	__sum16	check;
-	__be32	saddr;
-	__be32	daddr;
-	/*The options start here. */
-};
-
-
-
-
-// from uapi/linux/udp.h
-struct udphdr {
-	__be16	source;
-	__be16	dest;
-	__be16	len;
-	__sum16	check;
-};
-
-
-
-// from uapi/linux/tcp.h
-struct tcphdr {
-	__be16	source;
-	__be16	dest;
-	__be32	seq;
-	__be32	ack_seq;
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u16	res1:4,
-		doff:4,
-		fin:1,
-		syn:1,
-		rst:1,
-		psh:1,
-		ack:1,
-		urg:1,
-		ece:1,
-		cwr:1;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16	doff:4,
-		res1:4,
-		cwr:1,
-		ece:1,
-		urg:1,
-		ack:1,
-		psh:1,
-		rst:1,
-		syn:1,
-		fin:1;
-#else
-#error	"Adjust your <asm/byteorder.h> defines"
-#endif	
-	__be16	window;
-	__sum16	check;
-	__be16	urg_ptr;
-};
-
-
-#define SEC(NAME) __attribute__((section(NAME), used))
 #define PIN_GLOBAL_NS		2
 #define PIN_NONE			0
 struct bpf_elf_map {
@@ -119,7 +49,7 @@ struct bpf_elf_map SEC("maps") map = {
 
 typedef enum state {
     // 0 is reserved value
-            GOOD = 1,
+    GOOD = 1,
     BAD = 2,
 } gemodel_state;
 
