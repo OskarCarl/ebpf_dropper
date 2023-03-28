@@ -21,6 +21,9 @@ def runElevated(cmdToExec):
                     print(' '.join(expandedCmd))
                 p = subprocess.Popen(expandedCmd)
                 p.wait(timeout=10)
+                if p.returncode != 0:
+                    print("Encountered an error when running '{}'".format(' '.join(expandedCmd)))
+                    exit(p.returncode)
                 return
         print("Must be root or have one of {} to do this".format(helperPrograms))
         exit(2)
@@ -75,7 +78,7 @@ if gemodel:
 elif sequence:
     clang_args += ["-DGEMODEL=0", "-DDROP_SEQUENCE=1", "-DSEQUENCE=\\{{{}\\}}".format(sequence)]
 else:
-    clang_args += ["-DGEMODEL=0", "-DDROP_SEQUENCE=0", "-DPROBA_percents={}".format(args.P)]
+    clang_args += ["-DPROBA_percents={}".format(args.P)]
 
 if args.ips:
     ips = args.ips.split(",")
@@ -94,6 +97,12 @@ if args.v:
 with subprocess.Popen(compile_cmd, stdout=subprocess.PIPE) as clang:
     with subprocess.Popen(llc_command, stdin=clang.stdout) as llc:
         llc.communicate()
+        clang.wait()
+        if clang.returncode != 0 or llc.returncode != 0:
+            print("Encountered an error during compilation.")
+            print("  clang returncode: {}".format(clang.returncode))
+            print("  llc returncode: {}".format(llc.returncode))
+            exit(clang.returncode + llc.returncode)
 
 if args.attach:
     runElevated(["tc", "qdisc", "replace", "dev", args.attach, "clsact"])
