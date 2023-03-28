@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, subprocess, shutil
 
 TCP = 0x06
 UDP = 0x11
@@ -11,6 +11,19 @@ def ip_to_int(ip):
         sum += int(b) << ((3-i)*8)
     return sum
 
+def runElevated(cmdToExec):
+    if os.getuid() != 0:
+        helperPrograms = ['doas', 'sudo']
+        for h in helperPrograms:
+            if shutil.which(h):
+                expandedCmd = [shutil.which(h)] + cmdToExec
+                if args.v:
+                    print(' '.join(expandedCmd))
+                p = subprocess.Popen(expandedCmd)
+                p.wait(timeout=10)
+                return
+        print("Must be root or have one of {} to do this".format(helperPrograms))
+        exit(2)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--sequence", help="drop a sequence of packets (numbers separated by commas)", default="")
@@ -48,46 +61,41 @@ if sequence and gemodel:
 if args.clean:
     if os.path.exists(args.f):
         os.remove(args.f)
-    del_dev_cmd = "tc qdisc del dev {} clsact".format(args.attach)
-    if args.v:
-        print(del_dev_cmd)
-    os.system(del_dev_cmd)
+    runElevated(["tc", "qdisc", "del", "dev", args.attach, "clsact"])
     exit()
 
-clang_args = ""
+clang_args = []
+if gemodel:
+    clang_args += [
+        "-DGEMODEL=1", "-DDROP_SEQUENCE=0",
+        "-DGEMODEL_P_PERCENTS={}".format(args.P), "-DGEMODEL_R_PERCENTS={}".format(args.R),
+        "-DGEMODEL_K_PERCENTS={}".format(args.K), "-DGEMODEL_H_PERCENTS={}".format(args.H),
+        "-DSEED={}".format(args.seed)
+        ]
+elif sequence:
+    clang_args += ["-DGEMODEL=0", "-DDROP_SEQUENCE=1", "-DSEQUENCE=\\{{{}\\}}".format(sequence)]
+else:
+    clang_args += ["-DGEMODEL=0", "-DDROP_SEQUENCE=0", "-DPROBA_percents={}".format(args.P)]
 
-IPS=""
 if args.ips:
     ips = args.ips.split(",")
-    IPS="-DIP1_TO_DROP={} -DIP2_TO_DROP={} ".format(ip_to_int(ips[0]), ip_to_int(ips[1]))
+    clang_args += ["-DIP1_TO_DROP={}".format(ip_to_int(ips[0])), "-DIP2_TO_DROP={}".format(ip_to_int(ips[1]))]
 
-drop_sequence = 1 if sequence else 0
-use_gemodel = 1 if gemodel else 0
-protocol = UDP if args.udp else TCP
+clang_args += ["-DPORT_TO_WATCH={}".format(args.port), "-DPROTOCOL_TO_WATCH={}".format(UDP if args.udp else TCP),
+    "-I{}".format(args.headers)]
 
-clang_args = "-DGEMODEL={} -DGEMODEL_P_PERCENTS={} -DGEMODEL_R_PERCENTS={} -DGEMODEL_K_PERCENTS={} " \
-             "-DGEMODEL_H_PERCENTS={} -DPROBA_percents={} -DDROP_SEQUENCE={} -DSEQUENCE=\\{{{}\\}} -DSEED={} " \
-             "{}-DPORT_TO_WATCH={} -DPROTOCOL_TO_WATCH={} -I{}" \
-    .format(use_gemodel, args.P, args.R, args.K, args.H, args.P, drop_sequence, sequence, args.seed, IPS,
-            args.port, protocol, args.headers)
+compile_cmd = ["clang", "-O2", "-g", "-D__KERNEL__", "-D__ASM_SYSREG_H", "-Wno-unused-value", "-Wno-pointer-sign", "-fno-stack-protector",
+                "-Wno-compare-distinct-pointer-types"] + clang_args + ["-emit-llvm", "-c", "ebpf_dropper.c", "-o", "-"]
+llc_command = ["llc", "-march=bpf", "-filetype=obj", "-o", args.f]
 
-
-compile_cmd = "clang -O2 {} -g -D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign -fno-stack-protector " \
-                  "-Wno-compare-distinct-pointer-types -emit-llvm -c ebpf_dropper.c -o - | llc -march=bpf " \
-                  "-filetype=obj -o {}".format(clang_args, args.f)
 if args.v:
-    print(compile_cmd)
-os.system(compile_cmd)
+    print(' '.join(compile_cmd + ['|'] + llc_command))
+
+with subprocess.Popen(compile_cmd, stdout=subprocess.PIPE) as clang:
+    with subprocess.Popen(llc_command, stdin=clang.stdout) as llc:
+        llc.communicate()
 
 if args.attach:
-    add_dev_cmd = "tc qdisc replace dev {} clsact".format(args.attach)
-    if args.v:
-        print(add_dev_cmd)
-    os.system(add_dev_cmd)
+    runElevated(["tc", "qdisc", "replace", "dev", args.attach, "clsact"])
     direction = "ingress" if args.attach_ingress else 'egress'
-    attach_cmd = "tc filter replace dev {} {} bpf obj {} section action direct-action"\
-        .format(args.attach, direction, args.f)
-    if args.v:
-        print(attach_cmd)
-    os.system(attach_cmd)
-
+    runElevated(["tc", "filter", "replace", "dev", args.attach, direction, "bpf", "obj", args.f, "section", "action", "direct-action"])
