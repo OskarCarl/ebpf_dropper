@@ -83,6 +83,7 @@ typedef enum state {
 #define GEMODEL_R_PERCENTS ((uint32_t) 100)
 #define GEMODEL_K_PERCENTS ((uint32_t) 100)
 #define GEMODEL_H_PERCENTS ((uint32_t) 0)
+#define SEED 42
 
 #endif
 
@@ -98,7 +99,6 @@ typedef enum state {
 #define IP2_TO_DROP  0
 #endif
 
-//#define SEED 42
 //#define PORT_TO_WATCH 6121
 
 static int pow10[8] = {
