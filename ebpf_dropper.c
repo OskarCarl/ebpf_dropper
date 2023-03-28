@@ -27,25 +27,13 @@ unsigned long long load_word(void *skb, unsigned long long off) asm("llvm.bpf.lo
 
 #define PIN_GLOBAL_NS		2
 #define PIN_NONE			0
-struct bpf_elf_map {
-    __u32 type;
-    __u32 size_key;
-    __u32 size_value;
-    __u32 max_elem;
-    __u32 flags;
-    __u32 id;
-    __u32 pinning;
-};
-//
 
-
-struct bpf_elf_map SEC("maps") map = {
-        .type = BPF_MAP_TYPE_ARRAY,
-        .size_key = sizeof(int),
-        .size_value = sizeof(__u32),
-        .pinning = PIN_NONE,
-        .max_elem = 3,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 3);
+    __type(key, int);
+    __type(value, __u32);
+} map SEC(".maps");
 
 typedef enum state {
     // 0 is reserved value

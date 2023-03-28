@@ -72,7 +72,7 @@ clang_args = "-DGEMODEL={} -DGEMODEL_P_PERCENTS={} -DGEMODEL_R_PERCENTS={} -DGEM
             args.port, protocol, args.headers)
 
 
-compile_cmd = "clang -O2 {} -D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign -fno-stack-protector " \
+compile_cmd = "clang -O2 {} -g -D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign -fno-stack-protector " \
                   "-Wno-compare-distinct-pointer-types -emit-llvm -c ebpf_dropper.c -o - | llc -march=bpf " \
                   "-filetype=obj -o {}".format(clang_args, args.f)
 if args.v:
